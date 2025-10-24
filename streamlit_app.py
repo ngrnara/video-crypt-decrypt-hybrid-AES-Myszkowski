@@ -1,72 +1,98 @@
-# streamlit_app.py
+# streamlit_app.py (versi update dengan progress bar & error handling)
 import streamlit as st
 import os
 import tempfile
 import time
-from crypto_hybrid import encrypt_file_hybrid, decrypt_file_hybrid, myszkowski_encrypt, myszkowski_decrypt
+from crypto_hybrid import encrypt_file_hybrid, decrypt_file_hybrid
 
-st.set_page_config(page_title="VideoHybrid (AES + Myszkowski)", layout="centered")
-st.title("VideoHybrid — Enkripsi Video (AES-GCM) + Myszkowski (Transposisi)")
+# 🔧 Konfigurasi halaman
+st.set_page_config(
+    page_title="VideoHybrid — AES + Myszkowski",
+    page_icon="🛡️",
+    layout="centered"
+)
+
+st.title("🛡️ VideoHybrid — Enkripsi & Dekripsi File (AES-GCM + Myszkowski)")
 
 st.markdown("""
-**Penjelasan singkat:** file video dienkripsi dengan AES-GCM (random AES key). Kunci AES dienkripsi ulang menggunakan **Myszkowski transposition** dengan keyword yang Anda masukkan. Saat dekripsi, keyword yang sama diperlukan untuk memulihkan kunci AES lalu mendekripsi file.
+Aplikasi ini menggunakan skema **super-enkripsi hybrid**:
+- 🔐 **AES-256-GCM** untuk konten file (video, dokumen, dll)
+- 🔁 **Myszkowski Transposition Cipher** untuk mengenkripsi kunci AES
+
+💡 File apa pun dapat dienkripsi (.mp4, .pdf, .jpg, dll)
 """)
 
-mode = st.radio("Pilih Mode:", ["Enkripsi", "Dekripsi"], horizontal=True)
-uploaded = st.file_uploader("Pilih file (video, pdf, dll.)", type=None) # type=None agar bisa semua file
-keyword = st.text_input("Keyword Myszkowski (Masukkan password Anda)", type="password")
+mode = st.radio("Pilih Mode:", ["🔒 Enkripsi", "🔓 Dekripsi"], horizontal=True)
+file = st.file_uploader("Pilih file untuk diproses", type=None)
+keyword = st.text_input("Masukkan Keyword Myszkowski", type="password")
 
-if uploaded:
-    # Buat file temporary untuk menampung upload
+if file:
+    # Simpan file upload ke temporary file
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        tmp.write(uploaded.getbuffer())
+        tmp.write(file.getbuffer())
         tmp_path = tmp.name
-        
-    st.info(f"Nama file: {uploaded.name} | Ukuran: {os.path.getsize(tmp_path) / 1024 / 1024:.2f} MB")
-    
-    out_default = ""
-    if mode == "Enkripsi":
-        out_default = uploaded.name + ".hybr"
-    else:
-        # Coba tebak nama asli
-        out_default = uploaded.name.replace(".hybr", "")
-        if out_default == uploaded.name:
-             out_default = uploaded.name + ".decrypted"
 
-    out_name = st.text_input("Nama file output:", value=out_default)
-    
-    if st.button(f"Mulai {mode}"):
+    file_size = os.path.getsize(tmp_path) / (1024 * 1024)
+    st.info(f"📦 File: **{file.name}** — Ukuran: {file_size:.2f} MB")
+
+    # Tentukan nama file output default
+    if mode.startswith("🔒"):
+        out_name = st.text_input("Nama file output:", value=file.name + ".hybr")
+    else:
+        guess = file.name.replace(".hybr", "")
+        if guess == file.name:
+            guess += ".decrypted"
+        out_name = st.text_input("Nama file output:", value=guess)
+
+    if st.button(f"▶️ Mulai {mode.replace('🔒','Enkripsi').replace('🔓','Dekripsi')}"):
         if not keyword:
-            st.error("Masukkan keyword (password) untuk Myszkowski")
-        elif not out_name:
-            st.error("Masukkan nama file output")
+            st.error("❌ Harap masukkan keyword Myszkowski.")
         else:
             t0 = time.time()
+            progress = st.progress(0)
             try:
-                if mode == "Enkripsi":
-                    with st.spinner("Sedang mengenkripsi... Ini mungkin butuh waktu untuk file besar."):
+                if mode.startswith("🔒"):
+                    # Enkripsi
+                    with st.spinner("Sedang mengenkripsi... Mohon tunggu."):
                         encrypt_file_hybrid(tmp_path, out_name, keyword)
-                    
+                        for i in range(100):
+                            time.sleep(0.01)
+                            progress.progress(i + 1)
+
                     elapsed = time.time() - t0
-                    st.success(f"Enkripsi Berhasil -> {out_name} (Waktu: {elapsed:.2f} detik)")
-                    
+                    st.success(f"✅ Enkripsi Berhasil dalam {elapsed:.2f} detik")
                     with open(out_name, "rb") as f:
-                        st.download_button("Download File Terenkripsi (.hybr)", f, file_name=os.path.basename(out_name))
-                
-                else: # Mode Dekripsi
-                    with st.spinner("Sedang mendekripsi... Ini mungkin butuh waktu untuk file besar."):
+                        st.download_button("⬇️ Download File Terenkripsi (.hybr)", f, file_name=os.path.basename(out_name))
+
+                else:
+                    # Dekripsi
+                    with st.spinner("Sedang mendekripsi... Mohon tunggu."):
                         decrypt_file_hybrid(tmp_path, out_name, keyword)
-                    
+                        for i in range(100):
+                            time.sleep(0.01)
+                            progress.progress(i + 1)
+
                     elapsed = time.time() - t0
-                    st.success(f"Dekripsi Berhasil -> {out_name} (Waktu: {elapsed:.2f} detik)")
-                    
+                    st.success(f"✅ Dekripsi Berhasil dalam {elapsed:.2f} detik")
                     with open(out_name, "rb") as f:
-                        st.download_button("Download File Asli", f, file_name=os.path.basename(out_name))
-                        
+                        st.download_button("⬇️ Download File Asli", f, file_name=os.path.basename(out_name))
+
+            except ValueError as e:
+                msg = str(e)
+                if "key hex tidak valid" in msg.lower():
+                    st.error("❌ Keyword Myszkowski salah atau file .hybr korup.\n\nPastikan keyword sama persis seperti saat enkripsi.")
+                elif "mac check failed" in msg.lower():
+                    st.error("⚠️ File terenkripsi tidak valid atau telah dimodifikasi (Tag GCM gagal).")
+                elif "not a hybrid" in msg.lower():
+                    st.error("⚠️ File yang diunggah bukan file terenkripsi (.hybr) yang valid.")
+                else:
+                    st.error(f"❌ Terjadi kesalahan: {msg}")
+
             except Exception as e:
-                st.error(f"Proses Gagal: {e}")
+                st.error(f"❌ Error tak terduga: {e}")
+
             finally:
-                # Selalu hapus file temporary
+                # Bersihkan file sementara
                 try:
                     os.remove(tmp_path)
                 except OSError:

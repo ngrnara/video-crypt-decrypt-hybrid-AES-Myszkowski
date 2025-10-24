@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# File output
+*.hybr
+*.dec
+*.decrypted
+
+# File upload sementara
+uploads/

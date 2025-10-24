@@ -1,5 +1,6 @@
 # crypto_hybrid.py
 import os
+import streamlit as st
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
@@ -131,10 +132,13 @@ def decrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str)
         key_cipher_text = key_cipher_bytes.decode('utf-8')
 
         key_hex = myszkowski_decrypt(key_cipher_text, keyword_for_transpose)
-        print(f"DEBUG: Hasil Myszkowski Decrypt: '{key_hex}' (Panjang: {len(key_hex)})")
+        st.write(f"DEBUG: Hasil Myszkowski Decrypt: '{key_hex}' (Panjang: {len(key_hex)})")
         import re
         if not re.fullmatch(r'[0-9a-f]{64}', key_hex):
-            print("DEBUG: WARNING! Hasil Myszkowski Decrypt BUKAN hex string 64 karakter yang valid!")
+            st.warning("!!! DEBUG: WARNING! Hasil Myszkowski Decrypt BUKAN hex string 64 karakter yang valid!")
+        else:
+        st.info("--- DEBUG: Hasil Myszkowski Decrypt TERLIHAT valid (hex 64 char).")
+
         try:
             aes_key = bytes.fromhex(key_hex)
         except ValueError:

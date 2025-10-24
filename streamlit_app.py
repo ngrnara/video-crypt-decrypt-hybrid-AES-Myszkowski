@@ -25,29 +25,6 @@ Aplikasi ini menggunakan skema **super-enkripsi hybrid**:
 mode = st.radio("Pilih Mode:", ["🔒 Enkripsi", "🔓 Dekripsi"], horizontal=True)
 file = st.file_uploader("Pilih file untuk diproses", type=None)
 keyword = st.text_input("Masukkan Keyword kunci", type="password")
-st.markdown("""
-<script>
-const key = 'videoHybridKeyword';
-
-// Load keyword ketika halaman dimuat
-document.addEventListener("DOMContentLoaded", function() {
-    const saved = localStorage.getItem(key);
-    if (saved) {
-        const input = document.querySelector('input[type="password"]');
-        if (input && input.value === "") input.value = saved;
-    }
-});
-
-// Simpan keyword setiap kali berubah
-setInterval(() => {
-    const input = document.querySelector('input[type="password"]');
-    if (input) {
-        const val = input.value;
-        if (val) localStorage.setItem(key, val);
-    }
-}, 500);
-</script>
-""", unsafe_allow_html=True)
 
 if file:
     # Simpan file upload ke temporary file
@@ -71,6 +48,7 @@ if file:
         if not keyword:
             st.error("❌ Harap masukkan keyword Myszkowski.")
         else:
+            st.write(f"DEBUG: Keyword yang akan digunakan: '{keyword}' (Panjang: {len(keyword)})")
             t0 = time.time()
             progress = st.progress(0)
             try:

@@ -7,7 +7,7 @@ from Crypto.Random import get_random_bytes
 CHUNK = 64 * 1024  # 64KB
 AES_TAG_LEN = 16
 
-# ---------------- Myszkowski transposition (encrypt & decrypt)
+# ---------------- Myszkowski transposition (enkripsi & dekripsi)
 # Implementation works on arbitrary text (we'll pass hex string of AES key)
 
 def _keyword_order(keyword: str):

@@ -116,7 +116,7 @@ Streamlit akan otomatis membangun environment dan menjalankan aplikasi Anda.
 
 ---
 
-## 🧪 C. Pengujian Integritas Data (Wajib untuk Laporan Bab 4)
+## 🧪 C. Pengujian Integritas Data 
 
 Untuk membuktikan data tidak rusak setelah dekripsi, lakukan verifikasi *hash* file menggunakan **SHA-256**.
 

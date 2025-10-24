@@ -1,53 +1,17 @@
 # crypto_hybrid.py
 import os
-import streamlit as st
+import streamlit as st # <-- Pastikan import ini ada di paling atas file
+import re              # <-- Import re juga di paling atas
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
 CHUNK = 64 * 1024  # 64KB
 AES_TAG_LEN = 16
 
-# ---------------- Myszkowski transposition (encrypt & decrypt)
-def _keyword_order(keyword: str):
-    """
-    Menghasilkan urutan peringkat untuk Myszkowski.
-    Huruf yang sama memiliki peringkat yang sama, berdasarkan urutan alfabet.
-    Contoh: "BALLOON" -> [2, 1, 3, 3, 4, 4, 5] (A=1, B=2, L=3, N=4, O=5)
-    """
-    chars = list(keyword)
-    unique_sorted = sorted(set(chars))
-    rank_map = {c: i + 1 for i, c in enumerate(unique_sorted)}
-    return [rank_map[c] for c in chars]
-
-def myszkowski_encrypt(plaintext: str, keyword: str) -> str:
-    """
-    plaintext: string untuk ditransposisi (hex string dari kunci AES)
-    keyword: keyword string
-    returns: ciphertext string hasil transposisi
-    """
-    if not keyword:
-        raise ValueError("Keyword diperlukan untuk Myszkowski")
-
-    cols = len(keyword)
-    rows = []
-    for i in range(0, len(plaintext), cols):
-        rows.append(list(plaintext[i:i + cols].ljust(cols, '\0')))
-
-    ranks = _keyword_order(keyword)
-    idxs = list(range(cols))
-    idxs_sorted = sorted(idxs, key=lambda i: (ranks[i], i))
-
-    result_chars = []
-    for col in idxs_sorted:
-        for r in range(len(rows)):
-            ch = rows[r][col]
-            if ch != '\0':
-                result_chars.append(ch)
-
-    return ''.join(result_chars)
+# ... (kode _keyword_order, myszkowski_encrypt tetap sama) ...
 
 def myszkowski_decrypt(ciphertext: str, keyword: str) -> str:
-    """Mendekripsi ciphertext Myszkowski."""
+    # ... (kode myszkowski_decrypt tetap sama) ...
     if not keyword:
         raise ValueError("Keyword diperlukan untuk Myszkowski")
 
@@ -89,7 +53,7 @@ def myszkowski_decrypt(ciphertext: str, keyword: str) -> str:
     plain = ''.join(''.join(row) for row in rows).rstrip('\0')
     return plain
 
-# ---------------- AES-GCM file encryption
+# ... (kode encrypt_file_hybrid tetap sama) ...
 def encrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str):
     """Enkripsi file besar secara chunked dengan AES-GCM dan Myszkowski."""
     aes_key = get_random_bytes(32)
@@ -118,6 +82,7 @@ def encrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str)
 
         fout.write(cipher.digest())
 
+# --- FUNGSI decrypt_file_hybrid YANG DIPERBAIKI INDENTASINYA ---
 def decrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str):
     """Dekripsi file besar secara chunked."""
     total = os.path.getsize(in_path)
@@ -132,16 +97,19 @@ def decrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str)
         key_cipher_text = key_cipher_bytes.decode('utf-8')
 
         key_hex = myszkowski_decrypt(key_cipher_text, keyword_for_transpose)
+
+        # ---> BLOK DEBUGGING DENGAN INDENTASI BENAR <---
         st.write(f"DEBUG: Hasil Myszkowski Decrypt: '{key_hex}' (Panjang: {len(key_hex)})")
-        import re
         if not re.fullmatch(r'[0-9a-f]{64}', key_hex):
             st.warning("!!! DEBUG: WARNING! Hasil Myszkowski Decrypt BUKAN hex string 64 karakter yang valid!")
         else:
-        st.info("--- DEBUG: Hasil Myszkowski Decrypt TERLIHAT valid (hex 64 char).")
+            st.info("--- DEBUG: Hasil Myszkowski Decrypt TERLIHAT valid (hex 64 char).")
+        # ---> AKHIR BLOK DEBUGGING <---
 
         try:
             aes_key = bytes.fromhex(key_hex)
         except ValueError:
+            # Error ini dipicu jika 'key_hex' tidak valid
             raise ValueError("Keyword Myszkowski salah atau file korup (key hex tidak valid)")
 
         nonce_len = int.from_bytes(fin.read(1), 'big')
@@ -154,18 +122,38 @@ def decrypt_file_hybrid(in_path: str, out_path: str, keyword_for_transpose: str)
         if ciphertext_size < 0:
             raise ValueError("File korup (terlalu pendek)")
 
-        with open(out_path, 'wb') as fout:
-            bytes_read = 0
-            while bytes_read < ciphertext_size:
-                read_size = min(CHUNK, ciphertext_size - bytes_read)
-                chunk = fin.read(read_size)
-                if not chunk:
-                    break
-                fout.write(cipher.decrypt(chunk))
-                bytes_read += len(chunk)
+        # Variabel untuk menyimpan path file output sementara jika terjadi error
+        temp_out_path = out_path + ".tmp_decrypt" 
+
+        try:
+            with open(temp_out_path, 'wb') as fout: # Tulis ke file sementara dulu
+                bytes_read = 0
+                while bytes_read < ciphertext_size:
+                    read_size = min(CHUNK, ciphertext_size - bytes_read)
+                    chunk = fin.read(read_size)
+                    if not chunk:
+                        break
+                    fout.write(cipher.decrypt(chunk))
+                    bytes_read += len(chunk)
 
             tag = fin.read(AES_TAG_LEN)
             if len(tag) != AES_TAG_LEN:
                 raise ValueError("Tag tidak lengkap / file rusak")
 
-            cipher.verify(tag)
+            # Verifikasi tag SETELAH semua dekripsi selesai
+            cipher.verify(tag) 
+
+            # Jika verify berhasil, rename file sementara menjadi nama output akhir
+            os.rename(temp_out_path, out_path)
+
+        except ValueError as e:
+            # Jika verify GAGAL (ValueError dari verify), hapus file sementara
+            if os.path.exists(temp_out_path):
+                os.remove(temp_out_path)
+            # Re-raise error asli dari verify (penting untuk pesan error yang benar)
+            raise ValueError(f"Dekripsi Gagal (Keyword salah atau file telah dimodifikasi): {e}") 
+        except Exception as e:
+            # Tangkap error lain dan hapus file sementara
+            if os.path.exists(temp_out_path):
+                os.remove(temp_out_path)
+            raise e # Re-raise error tak terduga lainnya
